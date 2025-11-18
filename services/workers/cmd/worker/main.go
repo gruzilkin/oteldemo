@@ -38,7 +38,7 @@ func main() {
 	defer redisClient.Close()
 
 	// Initialize DNS resolver
-	dnsResolver := dns.NewResolver()
+	dnsResolver := dns.NewResolver(cfg)
 
 	// Create worker
 	w := worker.NewWorker(cfg, redisClient, dnsResolver)
