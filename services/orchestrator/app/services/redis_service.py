@@ -7,6 +7,7 @@ from datetime import datetime
 
 import redis.asyncio as redis
 from opentelemetry import trace
+from opentelemetry.propagate import inject
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -48,7 +49,7 @@ class RedisService:
 
     async def publish_dns_task(self, task_data: Dict[str, Any]) -> str:
         """
-        Publish a DNS lookup task to Redis Stream
+        Publish a DNS lookup task to Redis Stream with trace context
 
         Args:
             task_data: Dictionary containing task information
@@ -61,6 +62,14 @@ class RedisService:
                 span.set_attribute("task.id", task_data.get("task_id"))
                 span.set_attribute("task.location", task_data.get("location"))
                 span.set_attribute("task.domain", task_data.get("domain"))
+
+                # Inject trace context into the task message
+                trace_context = {}
+                inject(trace_context)  # Inject current trace context using W3C TraceContext format
+                task_data["trace_context"] = trace_context
+
+                # Debug: Log trace context
+                logger.info(f"Injected trace context into task {task_data.get('task_id')}: {trace_context}")
 
                 # Convert task data to string fields for Redis Stream
                 stream_data = {
@@ -83,12 +92,12 @@ class RedisService:
                 span.set_attribute("error.message", str(e))
                 raise
 
-    async def wait_for_results(self, request_id: str, expected_count: int, timeout_seconds: int = 30) -> list:
+    async def wait_for_results(self, trace_id: str, expected_count: int, timeout_seconds: int = 30) -> list:
         """
         Wait for worker results from Redis Stream
 
         Args:
-            request_id: The request ID to filter results
+            trace_id: The OpenTelemetry trace ID to filter results
             expected_count: Number of results to wait for
             timeout_seconds: Maximum time to wait
 
@@ -96,12 +105,11 @@ class RedisService:
             List of result dictionaries
         """
         with tracer.start_as_current_span("wait_for_results") as span:
-            span.set_attribute("request.id", request_id)
             span.set_attribute("expected.count", expected_count)
 
             results = []
-            consumer_group = f"orchestrator-{request_id}"
-            consumer_name = f"consumer-{request_id}"
+            consumer_group = f"orchestrator-{trace_id}"
+            consumer_name = f"consumer-{trace_id}"
 
             try:
                 # Create consumer group (ignore error if exists)
@@ -143,10 +151,10 @@ class RedisService:
                                     result_json = message_data.get("data", "{}")
                                     result = json.loads(result_json)
 
-                                    # Filter by request_id
-                                    if result.get("request_id") == request_id:
+                                    # Filter by trace_id
+                                    if result.get("trace_id") == trace_id:
                                         results.append(result)
-                                        logger.info(f"Received result {len(results)}/{expected_count} for request {request_id}")
+                                        logger.info(f"Received result {len(results)}/{expected_count} for trace {trace_id}")
 
                                     # Acknowledge message
                                     await self.redis_client.xack(

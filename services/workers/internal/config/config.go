@@ -31,7 +31,7 @@ func Load() *Config {
 		HTTPPort:              getEnv("HTTP_PORT", "8080"),
 		TasksStream:           "dns:tasks",
 		ResultsStream:         "dns:results",
-		ConsumerGroup:         "dns-workers",  // All workers share the same group
+		ConsumerGroup:         "workers-" + location,  // Each location has its own consumer group for fan-out
 	}
 }
 

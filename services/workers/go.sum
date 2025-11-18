@@ -1,2 +1,0 @@
-# This file will be populated when running go mod download
-# For now, it's a placeholder - the actual dependencies will be resolved during build

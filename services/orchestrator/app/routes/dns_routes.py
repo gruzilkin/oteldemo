@@ -5,7 +5,6 @@ from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException
 from opentelemetry import trace
-from opentelemetry.propagate import inject
 
 from app.models.dns_models import (
     DnsOrchestrateRequest,
@@ -27,57 +26,44 @@ async def orchestrate_dns_lookup(request: DnsOrchestrateRequest):
 
     This endpoint:
     1. Receives a DNS lookup request
-    2. Creates tasks for each requested location
-    3. Publishes tasks to Redis Streams
-    4. Waits for worker results
+    2. Extracts trace_id from current span for correlation
+    3. Creates a task and publishes to Redis Streams
+    4. Waits for worker results (correlated by trace_id)
     5. Aggregates and returns results
     """
     with tracer.start_as_current_span("orchestrate_dns_lookup") as span:
-        span.set_attribute("request.id", request.request_id)
+        # Extract trace_id from current span - this is our correlation ID
+        trace_id = format(span.get_span_context().trace_id, '032x')
+
         span.set_attribute("dns.domain", request.domain)
         span.set_attribute("locations.count", len(request.locations))
 
         logger.info(f"Orchestrating DNS lookup for domain: {request.domain}, "
-                   f"locations: {request.locations}, request_id: {request.request_id}")
+                   f"locations: {request.locations}, trace_id: {trace_id}")
 
         try:
-            # Create tasks for each location
-            tasks_published = 0
-            task_ids = []
+            # Create ONE task that will be consumed by all worker locations (fan-out)
+            task_message = DnsTaskMessage(
+                trace_id=trace_id,
+                task_id=trace_id,  # Use trace_id as task_id for simplicity
+                domain=request.domain,
+                location="",  # No specific location - all workers process it
+                record_types=request.record_types,
+                timestamp=datetime.utcnow().isoformat()
+            )
 
-            for location in request.locations:
-                task_id = f"{request.request_id}-{location}"
-                task_ids.append(task_id)
+            # Publish to Redis Stream ONCE - all workers will receive it via their consumer groups
+            # Trace context injection happens inside publish_dns_task
+            await redis_service.publish_dns_task(task_message.model_dump())
 
-                task_message = DnsTaskMessage(
-                    request_id=request.request_id,
-                    task_id=task_id,
-                    domain=request.domain,
-                    location=location,
-                    record_types=request.record_types,
-                    timestamp=datetime.utcnow().isoformat()
-                )
+            logger.info(f"Published task for trace {trace_id} - expecting {len(request.locations)} worker responses")
+            span.set_attribute("tasks.published", 1)
+            span.set_attribute("expected_workers", len(request.locations))
 
-                # Inject trace context into the task
-                task_dict = task_message.model_dump()
-                trace_context = {}
-                inject(trace_context)  # Inject current trace context
-                task_dict["trace_context"] = trace_context
-
-                # Debug: Log trace context
-                logger.info(f"Injected trace context for {location}: {trace_context}")
-
-                # Publish to Redis Stream
-                await redis_service.publish_dns_task(task_dict)
-                tasks_published += 1
-
-            logger.info(f"Published {tasks_published} tasks for request {request.request_id}")
-            span.set_attribute("tasks.published", tasks_published)
-
-            # Wait for results from workers
+            # Wait for results from ALL workers (each worker's consumer group gets the same message)
             results = await redis_service.wait_for_results(
-                request_id=request.request_id,
-                expected_count=tasks_published,
+                trace_id=trace_id,
+                expected_count=len(request.locations),  # Expect one result per location
                 timeout_seconds=30
             )
 
@@ -85,21 +71,21 @@ async def orchestrate_dns_lookup(request: DnsOrchestrateRequest):
             aggregated_results = aggregate_results(results)
 
             # Determine status
+            expected_results = len(request.locations)
             if len(results) == 0:
                 status = "timeout"
                 message = "No results received from workers"
-            elif len(results) < tasks_published:
+            elif len(results) < expected_results:
                 status = "partial"
-                message = f"Received {len(results)}/{tasks_published} results"
+                message = f"Received {len(results)}/{expected_results} results from worker locations"
             else:
                 status = "success"
-                message = f"Successfully processed {len(results)} location lookups"
+                message = f"Successfully received results from all {len(results)} worker locations"
 
             span.set_attribute("results.count", len(results))
             span.set_attribute("response.status", status)
 
             return DnsOrchestrateResponse(
-                request_id=request.request_id,
                 domain=request.domain,
                 status=status,
                 results=aggregated_results,

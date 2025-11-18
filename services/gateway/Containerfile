@@ -22,8 +22,8 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 # Copy built jar
 COPY --from=build /app/target/*.jar app.jar
 
-# Download OpenTelemetry Java agent
-ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v1.32.0/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
+# Download OpenTelemetry Java agent (latest stable)
+ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.20.1/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
 RUN chmod 644 /app/opentelemetry-javaagent.jar
 
 # Expose port

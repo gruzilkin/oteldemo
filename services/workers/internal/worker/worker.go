@@ -96,14 +96,8 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 		return
 	}
 
-	// Filter: Only process tasks for this worker's location
-	if task.Location != w.cfg.Location {
-		log.Printf("Skipping task %s - not for this location (task: %s, worker: %s)",
-			task.TaskID, task.Location, w.cfg.Location)
-		return
-	}
-
-	log.Printf("Processing task %s for domain %s at location %s", task.TaskID, task.Domain, task.Location)
+	// No filtering needed - each worker receives messages via its own consumer group
+	log.Printf("Processing task %s for domain %s at worker location %s", task.TaskID, task.Domain, w.cfg.Location)
 
 	// Extract trace context from task metadata if present
 	carrier := propagation.MapCarrier{}
@@ -124,9 +118,9 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 	ctx, span := tracer.Start(ctx, "process_dns_task",
 		trace.WithAttributes(
 			attribute.String("task.id", task.TaskID),
-			attribute.String("request.id", task.RequestID),
+			attribute.String("trace.id", task.TraceID),
 			attribute.String("dns.domain", task.Domain),
-			attribute.String("worker.location", task.Location),
+			attribute.String("worker.location", w.cfg.Location),  // Use worker's configured location
 		),
 	)
 	defer span.End()
@@ -139,8 +133,8 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 	// Prepare result
 	result := Result{
 		TaskID:           task.TaskID,
-		RequestID:        task.RequestID,
-		Location:         task.Location,
+		TraceID:          task.TraceID,
+		Location:         w.cfg.Location,  // Use worker's configured location
 		Domain:           task.Domain,
 		Status:           "success",
 		Records:          results,
@@ -180,11 +174,12 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 }
 
 // Task represents a DNS lookup task from Redis stream
+// Note: All workers receive the same task via separate consumer groups (fan-out pattern)
 type Task struct {
-	RequestID    string            `json:"request_id"`
+	TraceID      string            `json:"trace_id"`        // OpenTelemetry trace ID for correlation
 	TaskID       string            `json:"task_id"`
 	Domain       string            `json:"domain"`
-	Location     string            `json:"location"`
+	Location     string            `json:"location,omitempty"` // Not used - each worker uses its own configured location
 	RecordTypes  []string          `json:"record_types"`
 	Timestamp    string            `json:"timestamp"`
 	TraceContext map[string]string `json:"trace_context,omitempty"`
@@ -192,12 +187,12 @@ type Task struct {
 
 // Result represents the result of a DNS lookup task
 type Result struct {
-	TaskID           string                  `json:"task_id"`
-	RequestID        string                  `json:"request_id"`
-	Location         string                  `json:"location"`
-	Domain           string                  `json:"domain"`
-	Status           string                  `json:"status"`
+	TaskID           string                      `json:"task_id"`
+	TraceID          string                      `json:"trace_id"` // OpenTelemetry trace ID for correlation
+	Location         string                      `json:"location"`
+	Domain           string                      `json:"domain"`
+	Status           string                      `json:"status"`
 	Records          map[string]dns.LookupResult `json:"records"`
-	Error            string                  `json:"error,omitempty"`
-	ProcessingTimeMs float64                 `json:"processing_time_ms"`
+	Error            string                      `json:"error,omitempty"`
+	ProcessingTimeMs float64                     `json:"processing_time_ms"`
 }

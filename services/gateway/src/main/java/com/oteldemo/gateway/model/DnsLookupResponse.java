@@ -12,9 +12,6 @@ import java.util.Map;
 @AllArgsConstructor
 public class DnsLookupResponse {
 
-    @JsonProperty("request_id")
-    private String requestId;
-
     @JsonProperty("domain")
     private String domain;
 

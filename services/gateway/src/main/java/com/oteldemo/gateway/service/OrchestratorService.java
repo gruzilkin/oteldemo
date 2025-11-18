@@ -25,18 +25,18 @@ public class OrchestratorService {
     @Value("${orchestrator.url:http://orchestrator:8001}")
     private String orchestratorUrl;
 
-    public DnsLookupResponse submitDnsLookup(String requestId, DnsLookupRequest request) {
+    public DnsLookupResponse submitDnsLookup(DnsLookupRequest request) {
         String url = orchestratorUrl + "/api/v1/dns/orchestrate";
 
         logger.info("Forwarding DNS lookup to orchestrator: {}", url);
 
         Span currentSpan = Span.current();
         currentSpan.setAttribute("orchestrator.url", url);
+        String traceId = currentSpan.getSpanContext().getTraceId();
 
         try {
-            // Prepare request body
+            // Prepare request body (trace context propagated via HTTP headers automatically)
             Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("request_id", requestId);
             requestBody.put("domain", request.getDomain());
             requestBody.put("locations", request.getLocations());
             requestBody.put("record_types", request.getRecordTypes());
@@ -56,12 +56,11 @@ public class OrchestratorService {
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                logger.info("Successfully received response from orchestrator for request {}", requestId);
+                logger.info("Successfully received response from orchestrator for trace {}", traceId);
                 return response.getBody();
             } else {
                 logger.warn("Orchestrator returned non-success status: {}", response.getStatusCode());
                 return new DnsLookupResponse(
-                    requestId,
                     request.getDomain(),
                     "error",
                     null,
@@ -75,7 +74,6 @@ public class OrchestratorService {
             currentSpan.setAttribute("error.message", e.getMessage());
 
             return new DnsLookupResponse(
-                requestId,
                 request.getDomain(),
                 "error",
                 null,

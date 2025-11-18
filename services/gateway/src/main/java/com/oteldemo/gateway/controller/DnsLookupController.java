@@ -13,7 +13,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -26,22 +25,22 @@ public class DnsLookupController {
 
     @PostMapping("/dns/lookup")
     public ResponseEntity<DnsLookupResponse> lookupDns(@RequestBody DnsLookupRequest request) {
-        String requestId = UUID.randomUUID().toString();
-
-        logger.info("Received DNS lookup request for domain: {} with requestId: {}",
-                    request.getDomain(), requestId);
-
-        // Add current span attributes
+        // Get trace_id from current span - this is our correlation ID
         Span currentSpan = Span.current();
+        String traceId = currentSpan.getSpanContext().getTraceId();
+
+        logger.info("Received DNS lookup request for domain: {} with trace_id: {}",
+                    request.getDomain(), traceId);
+
+        // Add span attributes
         currentSpan.setAttribute("dns.domain", request.getDomain());
         currentSpan.setAttribute("dns.locations", String.join(",", request.getLocations()));
-        currentSpan.setAttribute("request.id", requestId);
 
         try {
             // Validate request
             if (request.getDomain() == null || request.getDomain().isEmpty()) {
                 return ResponseEntity.badRequest().body(
-                    new DnsLookupResponse(requestId, null, "error", null, "Domain is required")
+                    new DnsLookupResponse(null, "error", null, "Domain is required")
                 );
             }
 
@@ -55,21 +54,21 @@ public class DnsLookupController {
                 request.setRecordTypes(Arrays.asList("A", "AAAA", "MX", "TXT", "NS"));
             }
 
-            // Forward to orchestrator
-            DnsLookupResponse response = orchestratorService.submitDnsLookup(requestId, request);
+            // Forward to orchestrator (trace context propagated automatically)
+            DnsLookupResponse response = orchestratorService.submitDnsLookup(request);
 
-            logger.info("DNS lookup request {} processed successfully", requestId);
+            logger.info("DNS lookup for trace {} processed successfully", traceId);
             currentSpan.setAttribute("response.status", response.getStatus());
 
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            logger.error("Error processing DNS lookup request {}: {}", requestId, e.getMessage(), e);
+            logger.error("Error processing DNS lookup for trace {}: {}", traceId, e.getMessage(), e);
             currentSpan.setAttribute("error", true);
             currentSpan.setAttribute("error.message", e.getMessage());
 
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                new DnsLookupResponse(requestId, request.getDomain(), "error", null,
+                new DnsLookupResponse(request.getDomain(), "error", null,
                                      "Internal server error: " + e.getMessage())
             );
         }
