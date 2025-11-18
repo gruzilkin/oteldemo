@@ -29,6 +29,10 @@ See [map.md](map.md) for detailed architecture diagrams.
 - Central collector with authentication and aggregation
 - Complete trace export pipeline to Jaeger
 
+**Chaos engineering (Go workers):**
+- 30% probability of sequential vs concurrent DNS lookups
+- 10% probability of simulated lookup failures
+
 ## Prerequisites
 
 - **Podman** and **Podman Compose** installed
