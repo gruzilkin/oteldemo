@@ -8,6 +8,7 @@ from datetime import datetime
 import redis.asyncio as redis
 from opentelemetry import trace
 from opentelemetry.propagate import inject
+from opentelemetry.trace import Status, StatusCode
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -88,8 +89,8 @@ class RedisService:
 
             except Exception as e:
                 logger.error(f"Error publishing DNS task: {e}")
-                span.set_attribute("error", True)
-                span.set_attribute("error.message", str(e))
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, "Error publishing DNS task"))
                 raise
 
     async def wait_for_results(self, trace_id: str, expected_count: int, timeout_seconds: int = 30) -> list:
@@ -176,8 +177,8 @@ class RedisService:
 
             except Exception as e:
                 logger.error(f"Error waiting for results: {e}")
-                span.set_attribute("error", True)
-                span.set_attribute("error.message", str(e))
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, "Error waiting for results"))
                 return results
 
 

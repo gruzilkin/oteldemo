@@ -3,6 +3,7 @@ package com.oteldemo.gateway.service;
 import com.oteldemo.gateway.model.DnsLookupRequest;
 import com.oteldemo.gateway.model.DnsLookupResponse;
 import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -70,8 +71,8 @@ public class OrchestratorService {
 
         } catch (Exception e) {
             logger.error("Error communicating with orchestrator: {}", e.getMessage(), e);
-            currentSpan.setAttribute("error", true);
-            currentSpan.setAttribute("error.message", e.getMessage());
+            currentSpan.recordException(e);
+            currentSpan.setStatus(StatusCode.ERROR, "Failed to communicate with orchestrator");
 
             return new DnsLookupResponse(
                 request.getDomain(),

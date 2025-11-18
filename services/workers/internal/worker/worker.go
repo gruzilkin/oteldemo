@@ -3,11 +3,13 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
@@ -153,7 +155,9 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 	if allFailed {
 		result.Status = "failed"
 		result.Error = "All DNS lookups failed"
-		span.SetAttributes(attribute.Bool("error", true))
+		err := errors.New("all DNS lookups failed")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "All DNS lookups failed")
 	}
 
 	span.SetAttributes(

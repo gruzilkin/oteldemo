@@ -4,7 +4,7 @@ import com.oteldemo.gateway.model.DnsLookupRequest;
 import com.oteldemo.gateway.model.DnsLookupResponse;
 import com.oteldemo.gateway.service.OrchestratorService;
 import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.api.trace.StatusCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,8 +64,8 @@ public class DnsLookupController {
 
         } catch (Exception e) {
             logger.error("Error processing DNS lookup for trace {}: {}", traceId, e.getMessage(), e);
-            currentSpan.setAttribute("error", true);
-            currentSpan.setAttribute("error.message", e.getMessage());
+            currentSpan.recordException(e);
+            currentSpan.setStatus(StatusCode.ERROR, "Error processing DNS lookup");
 
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                 new DnsLookupResponse(request.getDomain(), "error", null,

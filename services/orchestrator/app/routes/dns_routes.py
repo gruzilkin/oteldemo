@@ -5,6 +5,7 @@ from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException
 from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 from app.models.dns_models import (
     DnsOrchestrateRequest,
@@ -94,8 +95,8 @@ async def orchestrate_dns_lookup(request: DnsOrchestrateRequest):
 
         except Exception as e:
             logger.error(f"Error orchestrating DNS lookup: {e}", exc_info=True)
-            span.set_attribute("error", True)
-            span.set_attribute("error.message", str(e))
+            span.record_exception(e)
+            span.set_status(Status(StatusCode.ERROR, "Error orchestrating DNS lookup"))
 
             raise HTTPException(
                 status_code=500,
