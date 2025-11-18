@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -21,6 +22,10 @@ func NewClient(redisURL string) *Client {
 	if err != nil {
 		log.Fatalf("Failed to parse Redis URL: %v", err)
 	}
+
+	// Configure ReadTimeout for long polling with Redis Streams
+	// Must be longer than Block duration in XREADGROUP (60s)
+	opts.ReadTimeout = 65 * time.Second
 
 	client := redis.NewClient(opts)
 
@@ -54,14 +59,44 @@ func (c *Client) CreateConsumerGroup(ctx context.Context, stream, group string) 
 	return nil
 }
 
-// ReadFromStream reads messages from a Redis stream
+// ReadPendingMessages reads pending messages (delivered but not acknowledged) from a Redis stream
+func (c *Client) ReadPendingMessages(ctx context.Context, stream, group, consumer string) ([]StreamMessage, error) {
+	result, err := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+		Group:    group,
+		Consumer: consumer,
+		Streams:  []string{stream, "0"}, // "0" = pending messages for this consumer
+		Count:    10,
+		Block:    0, // Non-blocking - return immediately
+	}).Result()
+
+	if err != nil {
+		if err == redis.Nil {
+			return nil, nil // No pending messages
+		}
+		return nil, err
+	}
+
+	var messages []StreamMessage
+	for _, stream := range result {
+		for _, msg := range stream.Messages {
+			messages = append(messages, StreamMessage{
+				ID:   msg.ID,
+				Data: msg.Values,
+			})
+		}
+	}
+
+	return messages, nil
+}
+
+// ReadFromStream reads new messages from a Redis stream
 func (c *Client) ReadFromStream(ctx context.Context, stream, group, consumer string) ([]StreamMessage, error) {
 	result, err := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    group,
 		Consumer: consumer,
-		Streams:  []string{stream, ">"},
+		Streams:  []string{stream, ">"}, // ">" = only new undelivered messages
 		Count:    10,
-		Block:    1000, // 1 second
+		Block:    60000, // 60 seconds - long polling for efficiency
 	}).Result()
 
 	if err != nil {

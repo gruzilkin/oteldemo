@@ -64,8 +64,7 @@ async def orchestrate_dns_lookup(request: DnsOrchestrateRequest):
             # Wait for results from ALL workers (each worker's consumer group gets the same message)
             results = await redis_service.wait_for_results(
                 trace_id=trace_id,
-                expected_count=len(request.locations),  # Expect one result per location
-                timeout_seconds=30
+                expected_count=len(request.locations)  # Expect one result per location
             )
 
             # Aggregate results

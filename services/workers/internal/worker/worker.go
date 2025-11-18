@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -54,7 +55,28 @@ func (w *Worker) Start(ctx context.Context) error {
 			log.Println("Worker stopping...")
 			return nil
 		default:
-			// Read messages from stream
+			// First, check for pending messages (delivered but not acknowledged)
+			// This ensures no messages are lost if worker crashes/restarts
+			pendingMessages, err := w.redis.ReadPendingMessages(
+				ctx,
+				w.cfg.TasksStream,
+				w.cfg.ConsumerGroup,
+				consumerName,
+			)
+
+			if err != nil && !strings.Contains(err.Error(), "i/o timeout") {
+				log.Printf("Error reading pending messages: %v", err)
+			}
+
+			// Process pending messages first
+			for _, msg := range pendingMessages {
+				w.processMessage(ctx, msg)
+				if err := w.redis.AckMessage(ctx, w.cfg.TasksStream, w.cfg.ConsumerGroup, msg.ID); err != nil {
+					log.Printf("Error acknowledging pending message: %v", err)
+				}
+			}
+
+			// Then read new messages from stream
 			messages, err := w.redis.ReadFromStream(
 				ctx,
 				w.cfg.TasksStream,
@@ -63,12 +85,15 @@ func (w *Worker) Start(ctx context.Context) error {
 			)
 
 			if err != nil {
-				log.Printf("Error reading from stream: %v", err)
+				// Timeout errors are expected during idle periods, don't log them
+				if !strings.Contains(err.Error(), "i/o timeout") {
+					log.Printf("Error reading from stream: %v", err)
+				}
 				time.Sleep(1 * time.Second)
 				continue
 			}
 
-			// Process each message
+			// Process each new message
 			for _, msg := range messages {
 				w.processMessage(ctx, msg)
 

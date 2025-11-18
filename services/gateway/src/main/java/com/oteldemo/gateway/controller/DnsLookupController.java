@@ -32,10 +32,6 @@ public class DnsLookupController {
         logger.info("Received DNS lookup request for domain: {} with trace_id: {}",
                     request.getDomain(), traceId);
 
-        // Add span attributes
-        currentSpan.setAttribute("dns.domain", request.getDomain());
-        currentSpan.setAttribute("dns.locations", String.join(",", request.getLocations()));
-
         try {
             // Validate request
             if (request.getDomain() == null || request.getDomain().isEmpty()) {
@@ -53,6 +49,11 @@ public class DnsLookupController {
             if (request.getRecordTypes() == null || request.getRecordTypes().isEmpty()) {
                 request.setRecordTypes(Arrays.asList("A", "AAAA", "MX", "TXT", "NS"));
             }
+
+            // Add span attributes (after defaults are set)
+            currentSpan.setAttribute("dns.domain", request.getDomain());
+            currentSpan.setAttribute("dns.locations", String.join(",", request.getLocations()));
+            currentSpan.setAttribute("dns.record_types", String.join(",", request.getRecordTypes()));
 
             // Forward to orchestrator (trace context propagated automatically)
             DnsLookupResponse response = orchestratorService.submitDnsLookup(request);

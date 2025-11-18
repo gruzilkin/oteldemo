@@ -93,7 +93,7 @@ class RedisService:
                 span.set_status(Status(StatusCode.ERROR, "Error publishing DNS task"))
                 raise
 
-    async def wait_for_results(self, trace_id: str, expected_count: int, timeout_seconds: int = 30) -> list:
+    async def wait_for_results(self, trace_id: str, expected_count: int, timeout_seconds: int = 10) -> list:
         """
         Wait for worker results from Redis Stream
 
