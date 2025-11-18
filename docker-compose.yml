@@ -7,8 +7,6 @@ services:
   redis:
     image: docker.io/redis:7-alpine
     container_name: oteldemo-redis
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -25,8 +23,6 @@ services:
       - COLLECTOR_OTLP_ENABLED=true
     ports:
       - "16686:16686"  # Jaeger UI
-      - "4317:4317"    # OTLP gRPC receiver
-      - "4318:4318"    # OTLP HTTP receiver
     networks:
       - oteldemo
 
@@ -41,11 +37,6 @@ services:
     environment:
       - COLLECTOR_API_KEY=${COLLECTOR_API_KEY}
       - JAEGER_ENDPOINT=jaeger:4317
-    ports:
-      - "4319:4317"    # OTLP gRPC (external access)
-      - "13133:13133"  # Health check
-      - "55679:55679"  # zpages
-      - "8888:8888"    # Metrics
     depends_on:
       - jaeger
     networks:
@@ -162,8 +153,6 @@ services:
       - REDIS_URL=redis://redis:6379
       - OTEL_SERVICE_NAME=dns-orchestrator
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://orchestrator-collector:4317
-    ports:
-      - "8001:8001"
     depends_on:
       - redis
       - orchestrator-collector
@@ -181,13 +170,11 @@ services:
       - WORKER_LOCATION=us-east-1
       - REDIS_URL=redis://redis:6379
       - OTEL_SERVICE_NAME=dns-worker-us-east-1
-      - OTEL_EXPORTER_OTLP_ENDPOINT=central-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=worker-us-collector:4317
       - HTTP_PORT=8080
-    ports:
-      - "8082:8080"
     depends_on:
       - redis
-      - central-collector
+      - worker-us-collector
     networks:
       - oteldemo
 
@@ -200,13 +187,11 @@ services:
       - WORKER_LOCATION=eu-west-1
       - REDIS_URL=redis://redis:6379
       - OTEL_SERVICE_NAME=dns-worker-eu-west-1
-      - OTEL_EXPORTER_OTLP_ENDPOINT=central-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=worker-eu-collector:4317
       - HTTP_PORT=8080
-    ports:
-      - "8083:8080"
     depends_on:
       - redis
-      - central-collector
+      - worker-eu-collector
     networks:
       - oteldemo
 
@@ -219,13 +204,11 @@ services:
       - WORKER_LOCATION=asia-south-1
       - REDIS_URL=redis://redis:6379
       - OTEL_SERVICE_NAME=dns-worker-asia-south-1
-      - OTEL_EXPORTER_OTLP_ENDPOINT=central-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=worker-asia-collector:4317
       - HTTP_PORT=8080
-    ports:
-      - "8084:8080"
     depends_on:
       - redis
-      - central-collector
+      - worker-asia-collector
     networks:
       - oteldemo
 

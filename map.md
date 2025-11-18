@@ -18,6 +18,9 @@ graph TB
     Central[Central Collector]
     GatewayCol[Gateway Collector]
     OrchCol[Orchestrator Collector]
+    WorkerUSCol[Worker US Collector]
+    WorkerEUCol[Worker EU Collector]
+    WorkerAsiaCol[Worker Asia Collector]
 
     %% HTTP Request Flow
     Client -->|"HTTP POST<br/>/api/v1/dns/lookup"| Gateway
@@ -36,11 +39,14 @@ graph TB
     %% Trace Export Flow
     Gateway ==>|"OTLP gRPC"| GatewayCol
     Orchestrator ==>|"OTLP gRPC"| OrchCol
-    WorkerUS ==>|"OTLP gRPC"| Central
-    WorkerEU ==>|"OTLP gRPC"| Central
-    WorkerAsia ==>|"OTLP gRPC"| Central
+    WorkerUS ==>|"OTLP gRPC"| WorkerUSCol
+    WorkerEU ==>|"OTLP gRPC"| WorkerEUCol
+    WorkerAsia ==>|"OTLP gRPC"| WorkerAsiaCol
     GatewayCol ==>|"Forward"| Central
     OrchCol ==>|"Forward"| Central
+    WorkerUSCol ==>|"Forward"| Central
+    WorkerEUCol ==>|"Forward"| Central
+    WorkerAsiaCol ==>|"Forward"| Central
     Central ==>|"Export"| Jaeger
 
     %% Styling
@@ -53,7 +59,7 @@ graph TB
     class Gateway,Orchestrator appService
     class WorkerUS,WorkerEU,WorkerAsia worker
     class Redis,Jaeger infrastructure
-    class Central,GatewayCol,OrchCol collector
+    class Central,GatewayCol,OrchCol,WorkerUSCol,WorkerEUCol,WorkerAsiaCol collector
     class Client client
 ```
 
@@ -80,11 +86,14 @@ graph TB
 
 | Collector | Type | Configuration | Purpose |
 |-----------|------|---------------|---------|
-| **Central Collector** | Aggregator | Receives from sidecars and workers | Aggregates traces, exports to Jaeger |
+| **Central Collector** | Aggregator | Receives from all sidecars | Aggregates traces, exports to Jaeger |
 | **Gateway Collector** | Sidecar | Receives from Gateway | Pre-processes Gateway traces |
 | **Orchestrator Collector** | Sidecar | Receives from Orchestrator | Pre-processes Orchestrator traces |
+| **Worker US Collector** | Sidecar | Receives from Worker US-East-1 | Pre-processes US worker traces |
+| **Worker EU Collector** | Sidecar | Receives from Worker EU-West-1 | Pre-processes EU worker traces |
+| **Worker Asia Collector** | Sidecar | Receives from Worker Asia-South-1 | Pre-processes Asia worker traces |
 
-**Note:** Worker sidecar collectors are defined in docker-compose.yml but not currently used. Workers send traces directly to the central collector for simplicity.
+**Architecture:** All 6 collectors use the same sidecar configuration, forwarding traces to the central collector, which exports to Jaeger.
 
 ## Communication Patterns
 
@@ -108,11 +117,13 @@ Orchestrator → dns:tasks → [Worker-US, Worker-EU, Worker-Asia] → dns:resul
 ```
 Gateway → Gateway Collector → Central Collector → Jaeger
 Orchestrator → Orchestrator Collector → Central Collector → Jaeger
-Workers → Central Collector → Jaeger
+Worker US → Worker US Collector → Central Collector → Jaeger
+Worker EU → Worker EU Collector → Central Collector → Jaeger
+Worker Asia → Worker Asia Collector → Central Collector → Jaeger
 ```
 - **Protocol:** OTLP over gRPC
-- **Multi-tier:** Sidecar collectors allow per-service trace processing
-- **Workers:** Send directly to central collector (no sidecar)
+- **Multi-tier:** All services use sidecar collectors for per-service trace processing
+- **Architecture:** 6 sidecar collectors + 1 central aggregator = 7 total collectors
 
 ## Key Architecture Patterns
 
@@ -189,28 +200,24 @@ All services run on the `oteldemo` Docker bridge network for service discovery a
 
 ## Health Checks
 
-- **Redis:** `redis-cli ping` every 5s
-- **Central Collector:** http://localhost:13133
-- **Jaeger:** http://localhost:16686
+- **Redis:** Internal health check via `redis-cli ping` every 5s
+- **Jaeger UI:** http://localhost:16686
 
-## Port Mapping
+## Public Ports
 
 | Port | Service | Purpose |
 |------|---------|---------|
-| 6379 | Redis | Redis protocol |
 | 8080 | Gateway | HTTP API |
-| 8001 | Orchestrator | HTTP API |
-| 8082 | Worker US-East | HTTP health check |
-| 8083 | Worker EU-West | HTTP health check |
-| 8084 | Worker Asia-South | HTTP health check |
-| 4319 | Central Collector | OTLP gRPC (external) |
-| 13133 | Central Collector | Health check |
 | 16686 | Jaeger | Web UI |
-| 4317 | Jaeger | OTLP gRPC receiver |
+
+All other services communicate internally via the Docker network and do not expose public ports.
 
 ## Dependencies
 
 Service startup order:
 1. Infrastructure: Redis, Jaeger
-2. Collectors: Central → Sidecars
-3. Application: Orchestrator → Workers → Gateway
+2. Collectors: Central Collector → All 6 Sidecar Collectors
+3. Application Services:
+   - Orchestrator (depends on: Redis, Orchestrator Collector)
+   - Workers (each depends on: Redis, respective Worker Collector)
+   - Gateway (depends on: Orchestrator, Gateway Collector)
