@@ -1,0 +1,74 @@
+# OpenTelemetry Collector Central Configuration
+# This collector receives traces from all sidecar collectors and exports to Jaeger
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 2s
+    send_batch_size: 100
+    send_batch_max_size: 200
+
+  # Add resource attributes to identify central collector
+  resource:
+    attributes:
+      - key: collector.type
+        value: central
+        action: upsert
+
+  # Memory limiter
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1024
+
+  # Tail sampling for demonstration (optional - samples 100% for demo)
+  probabilistic_sampler:
+    sampling_percentage: 100
+
+extensions:
+  # Health check extension
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  # pprof extension for debugging
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+  # zpages extension for live debugging
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+exporters:
+  # Export to Jaeger
+  otlp/jaeger:
+    endpoint: ${JAEGER_ENDPOINT}
+    tls:
+      insecure: true
+
+  # Logging exporter for debugging
+  logging:
+    loglevel: info
+    sampling_initial: 10
+    sampling_thereafter: 500
+
+service:
+  extensions: [health_check, pprof, zpages]
+
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, probabilistic_sampler, batch]
+      exporters: [otlp/jaeger, logging]
+
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      level: detailed
+      address: 0.0.0.0:8888

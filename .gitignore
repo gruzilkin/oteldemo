@@ -1,0 +1,48 @@
+# Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/
+mvnw
+mvnw.cmd
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.env.local
+*.egg-info/
+dist/
+build/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# IDEs
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Container logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak

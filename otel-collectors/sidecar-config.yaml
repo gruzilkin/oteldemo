@@ -1,0 +1,55 @@
+# OpenTelemetry Collector Sidecar Configuration
+# This collector runs as a sidecar to each service and forwards traces to the central collector
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 50
+    send_batch_max_size: 100
+
+  # Add resource attributes to identify which sidecar this is
+  resource:
+    attributes:
+      - key: collector.type
+        value: sidecar
+        action: upsert
+      - key: collector.name
+        value: ${COLLECTOR_NAME}
+        action: upsert
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+exporters:
+  # Export to central collector
+  otlp/central:
+    endpoint: ${CENTRAL_COLLECTOR_ENDPOINT}
+    tls:
+      insecure: true
+
+  # Logging exporter for debugging (optional)
+  logging:
+    loglevel: info
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp/central, logging]
+
+  telemetry:
+    logs:
+      level: info
