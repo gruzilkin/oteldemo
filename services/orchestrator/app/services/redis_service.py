@@ -70,7 +70,7 @@ class RedisService:
                 task_data["trace_context"] = trace_context
 
                 # Debug: Log trace context
-                logger.info(f"Injected trace context into task {task_data.get('task_id')}: {trace_context}")
+                logger.info(f"Injected trace context: {trace_context}")
 
                 # Convert task data to string fields for Redis Stream
                 stream_data = {
@@ -155,7 +155,7 @@ class RedisService:
                                     # Filter by trace_id
                                     if result.get("trace_id") == trace_id:
                                         results.append(result)
-                                        logger.info(f"Received result {len(results)}/{expected_count} for trace {trace_id}")
+                                        logger.info(f"Received result {len(results)}/{expected_count}")
 
                                     # Acknowledge message
                                     await self.redis_client.xack(

@@ -29,8 +29,8 @@ public class DnsLookupController {
         Span currentSpan = Span.current();
         String traceId = currentSpan.getSpanContext().getTraceId();
 
-        logger.info("Received DNS lookup request for domain: {} with trace_id: {}",
-                    request.getDomain(), traceId);
+        logger.info("Received DNS lookup request for domain: {}",
+                    request.getDomain());
 
         try {
             // Validate request
@@ -58,13 +58,13 @@ public class DnsLookupController {
             // Forward to orchestrator (trace context propagated automatically)
             DnsLookupResponse response = orchestratorService.submitDnsLookup(request);
 
-            logger.info("DNS lookup for trace {} processed successfully", traceId);
+            logger.info("DNS lookup processed successfully");
             currentSpan.setAttribute("response.status", response.getStatus());
 
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            logger.error("Error processing DNS lookup for trace {}: {}", traceId, e.getMessage(), e);
+            logger.error("Error processing DNS lookup: {}", e.getMessage(), e);
             currentSpan.recordException(e);
             currentSpan.setStatus(StatusCode.ERROR, "Error processing DNS lookup");
 

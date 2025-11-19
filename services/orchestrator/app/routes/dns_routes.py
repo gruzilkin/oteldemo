@@ -40,7 +40,7 @@ async def orchestrate_dns_lookup(request: DnsOrchestrateRequest):
         span.set_attribute("locations.count", len(request.locations))
 
         logger.info(f"Orchestrating DNS lookup for domain: {request.domain}, "
-                   f"locations: {request.locations}, trace_id: {trace_id}")
+                   f"locations: {request.locations}")
 
         try:
             # Create ONE task that will be consumed by all worker locations (fan-out)
@@ -57,7 +57,7 @@ async def orchestrate_dns_lookup(request: DnsOrchestrateRequest):
             # Trace context injection happens inside publish_dns_task
             await redis_service.publish_dns_task(task_message.model_dump())
 
-            logger.info(f"Published task for trace {trace_id} - expecting {len(request.locations)} worker responses")
+            logger.info(f"Published task - expecting {len(request.locations)} worker responses")
             span.set_attribute("tasks.published", 1)
             span.set_attribute("expected_workers", len(request.locations))
 

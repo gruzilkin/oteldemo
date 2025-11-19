@@ -57,7 +57,7 @@ public class OrchestratorService {
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                logger.info("Successfully received response from orchestrator for trace {}", traceId);
+                logger.info("Successfully received response from orchestrator");
                 return response.getBody();
             } else {
                 logger.warn("Orchestrator returned non-success status: {}", response.getStatusCode());
