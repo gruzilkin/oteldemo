@@ -6,7 +6,7 @@ A comprehensive demonstration of OpenTelemetry distributed tracing across **Java
 
 This demo simulates a geo-distributed DNS lookup system that demonstrates:
 
-- **Multi-language instrumentation**: Java (Spring Boot), Python (FastAPI), and Go (Gin)
+- **Multi-language instrumentation**: Java (Spring Boot), Python (FastAPI), and Go
 - **Communication patterns**: Synchronous (REST) and asynchronous (Redis Streams)
 - **Multi-tier OTEL collectors**: 6 sidecar collectors + 1 central aggregator with authentication
 - **Full observability**: End-to-end trace visualization in Jaeger

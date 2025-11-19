@@ -147,7 +147,6 @@ services:
       - OTEL_SERVICE_NAME=dns-worker-us-east-1
       - OTEL_EXPORTER_OTLP_ENDPOINT=worker-us-collector:4317
       - OTEL_LOGS_EXPORTER=otlp
-      - HTTP_PORT=8080
     depends_on:
       - redis
       - worker-us-collector
@@ -161,7 +160,6 @@ services:
       - OTEL_SERVICE_NAME=dns-worker-eu-west-1
       - OTEL_EXPORTER_OTLP_ENDPOINT=worker-eu-collector:4317
       - OTEL_LOGS_EXPORTER=otlp
-      - HTTP_PORT=8080
     depends_on:
       - redis
       - worker-eu-collector
@@ -175,7 +173,6 @@ services:
       - OTEL_SERVICE_NAME=dns-worker-asia-south-1
       - OTEL_EXPORTER_OTLP_ENDPOINT=worker-asia-collector:4317
       - OTEL_LOGS_EXPORTER=otlp
-      - HTTP_PORT=8080
     depends_on:
       - redis
       - worker-asia-collector

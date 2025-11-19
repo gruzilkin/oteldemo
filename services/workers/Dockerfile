@@ -29,9 +29,6 @@ WORKDIR /app
 # Copy binary from build stage
 COPY --from=build /app/worker .
 
-# Expose HTTP port
-EXPOSE 8080
-
 # Set environment variables
 ENV OTEL_SERVICE_NAME=dns-worker
 

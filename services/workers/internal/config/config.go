@@ -11,7 +11,6 @@ type Config struct {
 	RedisURL                   string
 	OtelCollectorEndpoint      string
 	ServiceName                string
-	HTTPPort                   string
 	TasksStream                string
 	ResultsStream              string
 	ConsumerGroup              string
@@ -47,7 +46,6 @@ func Load() *Config {
 		RedisURL:                   getEnv("REDIS_URL", "redis://redis:6379"),
 		OtelCollectorEndpoint:      getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "worker-collector:4317"),
 		ServiceName:                getEnv("OTEL_SERVICE_NAME", "dns-worker-"+location),
-		HTTPPort:                   getEnv("HTTP_PORT", "8080"),
 		TasksStream:                "dns:tasks",
 		ResultsStream:              "dns:results",
 		ConsumerGroup:              "workers-" + location,  // Each location has its own consumer group for fan-out
