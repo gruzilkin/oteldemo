@@ -19,8 +19,6 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
-	log.Printf("Starting DNS Worker for location: %s", cfg.Location)
-
 	// Initialize OpenTelemetry Tracing
 	shutdownTracer, err := telemetry.InitTracer(cfg)
 	if err != nil {
@@ -33,7 +31,7 @@ func main() {
 	}()
 
 	// Initialize OpenTelemetry Logging
-	shutdownLogger, _, err := telemetry.InitLogger(cfg)
+	shutdownLogger, logger, err := telemetry.InitLogger(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
@@ -43,6 +41,10 @@ func main() {
 		}
 	}()
 
+	logger.Info("Starting DNS Worker",
+		"location", cfg.Location,
+	)
+
 	// Initialize Redis client
 	redisClient := redis.NewClient(cfg.RedisURL)
 	defer redisClient.Close()
@@ -51,7 +53,7 @@ func main() {
 	dnsResolver := dns.NewResolver(cfg)
 
 	// Create worker
-	w := worker.NewWorker(cfg, redisClient, dnsResolver)
+	w := worker.NewWorker(cfg, redisClient, dnsResolver, logger)
 
 	// Start worker
 	ctx, cancel := context.WithCancel(context.Background())
@@ -59,7 +61,7 @@ func main() {
 
 	go func() {
 		if err := w.Start(ctx); err != nil {
-			log.Printf("Worker error: %v", err)
+			logger.Error("Worker error", "error", err)
 		}
 	}()
 
@@ -68,11 +70,11 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down worker...")
+	logger.Info("Shutting down worker...")
 
 	// Graceful shutdown
 	cancel() // Stop worker
 	time.Sleep(2 * time.Second)
 
-	log.Println("Worker stopped")
+	logger.Info("Worker stopped")
 }

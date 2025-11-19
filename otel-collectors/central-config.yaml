@@ -1,5 +1,5 @@
 # OpenTelemetry Collector Central Configuration
-# This collector receives traces and logs from all sidecar collectors and exports to Jaeger and Grafana LGTM
+# This collector receives traces and logs from all sidecar collectors and exports to Jaeger, Grafana LGTM, and Graylog
 
 receivers:
   otlp:
@@ -57,6 +57,12 @@ exporters:
     tls:
       insecure: true
 
+  # Export logs to Graylog via native OTLP
+  otlp/graylog:
+    endpoint: ${GRAYLOG_ENDPOINT}
+    tls:
+      insecure: true
+
   # Logging exporter for debugging
   logging:
     loglevel: info
@@ -75,7 +81,7 @@ service:
     logs:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
-      exporters: [otlp/lgtm, logging]
+      exporters: [otlp/lgtm, otlp/graylog, logging]
 
   telemetry:
     logs:

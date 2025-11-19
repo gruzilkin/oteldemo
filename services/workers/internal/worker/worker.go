@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -26,20 +26,24 @@ type Worker struct {
 	cfg         *config.Config
 	redis       *redis.Client
 	dnsResolver *dns.Resolver
+	logger      *slog.Logger
 }
 
 // NewWorker creates a new worker
-func NewWorker(cfg *config.Config, redisClient *redis.Client, dnsResolver *dns.Resolver) *Worker {
+func NewWorker(cfg *config.Config, redisClient *redis.Client, dnsResolver *dns.Resolver, logger *slog.Logger) *Worker {
 	return &Worker{
 		cfg:         cfg,
 		redis:       redisClient,
 		dnsResolver: dnsResolver,
+		logger:      logger,
 	}
 }
 
 // Start starts the worker
 func (w *Worker) Start(ctx context.Context) error {
-	log.Printf("Worker starting for location: %s", w.cfg.Location)
+		w.logger.InfoContext(ctx, "Worker starting",
+			"location", w.cfg.Location,
+		)
 
 	// Create consumer group
 	if err := w.redis.CreateConsumerGroup(ctx, w.cfg.TasksStream, w.cfg.ConsumerGroup); err != nil {
@@ -52,7 +56,7 @@ func (w *Worker) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Worker stopping...")
+			w.logger.Info("Worker stopping")
 			return nil
 		default:
 			// First, check for pending messages (delivered but not acknowledged)
@@ -64,16 +68,20 @@ func (w *Worker) Start(ctx context.Context) error {
 				consumerName,
 			)
 
-			if err != nil && !strings.Contains(err.Error(), "i/o timeout") {
-				log.Printf("Error reading pending messages: %v", err)
-			}
+				if err != nil && !strings.Contains(err.Error(), "i/o timeout") {
+					w.logger.ErrorContext(ctx, "Error reading pending messages",
+						"error", err,
+					)
+				}
 
 			// Process pending messages first
 			for _, msg := range pendingMessages {
 				w.processMessage(ctx, msg)
-				if err := w.redis.AckMessage(ctx, w.cfg.TasksStream, w.cfg.ConsumerGroup, msg.ID); err != nil {
-					log.Printf("Error acknowledging pending message: %v", err)
-				}
+					if err := w.redis.AckMessage(ctx, w.cfg.TasksStream, w.cfg.ConsumerGroup, msg.ID); err != nil {
+						w.logger.ErrorContext(ctx, "Error acknowledging pending message",
+							"error", err,
+						)
+					}
 			}
 
 			// Then read new messages from stream
@@ -84,11 +92,13 @@ func (w *Worker) Start(ctx context.Context) error {
 				consumerName,
 			)
 
-			if err != nil {
-				// Timeout errors are expected during idle periods, don't log them
-				if !strings.Contains(err.Error(), "i/o timeout") {
-					log.Printf("Error reading from stream: %v", err)
-				}
+				if err != nil {
+					// Timeout errors are expected during idle periods, don't log them
+					if !strings.Contains(err.Error(), "i/o timeout") {
+						w.logger.ErrorContext(ctx, "Error reading from stream",
+							"error", err,
+						)
+					}
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -98,9 +108,11 @@ func (w *Worker) Start(ctx context.Context) error {
 				w.processMessage(ctx, msg)
 
 				// Acknowledge message
-				if err := w.redis.AckMessage(ctx, w.cfg.TasksStream, w.cfg.ConsumerGroup, msg.ID); err != nil {
-					log.Printf("Error acknowledging message: %v", err)
-				}
+					if err := w.redis.AckMessage(ctx, w.cfg.TasksStream, w.cfg.ConsumerGroup, msg.ID); err != nil {
+						w.logger.ErrorContext(ctx, "Error acknowledging message",
+							"error", err,
+						)
+					}
 			}
 		}
 	}
@@ -113,28 +125,24 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 	// Extract task data
 	dataJSON, ok := msg.Data["data"].(string)
 	if !ok {
-		log.Printf("Invalid message format: %v", msg.Data)
+		w.logger.Warn("Invalid message format", "data", msg.Data)
 		return
 	}
 
 	var task Task
 	if err := json.Unmarshal([]byte(dataJSON), &task); err != nil {
-		log.Printf("Error parsing task: %v", err)
+		w.logger.Error("Error parsing task", "error", err)
 		return
 	}
-
-	// No filtering needed - each worker receives messages via its own consumer group
-	log.Printf("Processing task %s for domain %s at worker location %s", task.TaskID, task.Domain, w.cfg.Location)
 
 	// Extract trace context from task metadata if present
 	carrier := propagation.MapCarrier{}
 	if task.TraceContext != nil {
-		log.Printf("Received trace context: %v", task.TraceContext)
 		for k, v := range task.TraceContext {
 			carrier.Set(k, v)
 		}
 	} else {
-		log.Printf("WARNING: No trace context received for task %s", task.TaskID)
+		w.logger.Warn("Missing trace context for task", "task_id", task.TaskID)
 	}
 
 	// Extract context from carrier
@@ -147,10 +155,17 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 			attribute.String("task.id", task.TaskID),
 			attribute.String("trace.id", task.TraceID),
 			attribute.String("dns.domain", task.Domain),
-			attribute.String("worker.location", w.cfg.Location),  // Use worker's configured location
+			attribute.String("worker.location", w.cfg.Location), // Use worker's configured location
 		),
 	)
 	defer span.End()
+
+	taskLogger := w.logger.With(
+		"task_id", task.TaskID,
+		"domain", task.Domain,
+		"worker_location", w.cfg.Location,
+	)
+	taskLogger.InfoContext(ctx, "Processing DNS task")
 
 	// Perform DNS lookups (concurrent!)
 	results := w.dnsResolver.LookupAllRecords(ctx, task.Domain, task.RecordTypes)
@@ -161,7 +176,7 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 	result := Result{
 		TaskID:           task.TaskID,
 		TraceID:          task.TraceID,
-		Location:         w.cfg.Location,  // Use worker's configured location
+		Location:         w.cfg.Location, // Use worker's configured location
 		Domain:           task.Domain,
 		Status:           "success",
 		Records:          results,
@@ -183,6 +198,7 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 		err := errors.New("all DNS lookups failed")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "All DNS lookups failed")
+		taskLogger.WarnContext(ctx, "All DNS lookups failed")
 	}
 
 	span.SetAttributes(
@@ -192,13 +208,17 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 
 	// Publish result
 	if _, err := w.redis.PublishResult(ctx, w.cfg.ResultsStream, result); err != nil {
-		log.Printf("Error publishing result: %v", err)
+		taskLogger.ErrorContext(ctx, "Error publishing result",
+			"error", err,
+		)
 		span.SetAttributes(
 			attribute.Bool("error", true),
 			attribute.String("error.message", err.Error()),
 		)
 	} else {
-		log.Printf("Published result for task %s (processing time: %dms)", task.TaskID, processingTime.Milliseconds())
+		taskLogger.InfoContext(ctx, "Published result",
+			"processing_time_ms", processingTime.Milliseconds(),
+		)
 	}
 }
 

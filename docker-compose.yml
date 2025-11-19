@@ -26,6 +26,60 @@ services:
     ports:
       - "3000:3000"   # Grafana UI
 
+  # ==================== Graylog Stack ====================
+
+  # MongoDB for Graylog metadata
+  graylog-mongodb:
+    image: docker.io/mongo:7.0
+    restart: on-failure
+    volumes:
+      - graylog-mongodb-data:/data/db
+
+  # Graylog DataNode (search backend)
+  graylog-datanode:
+    image: docker.io/graylog/graylog-datanode:7.0
+    hostname: datanode
+    environment:
+      - GRAYLOG_DATANODE_NODE_ID_FILE=/var/lib/graylog-datanode/node-id
+      - GRAYLOG_DATANODE_PASSWORD_SECRET=${GRAYLOG_PASSWORD_SECRET}
+      - GRAYLOG_DATANODE_MONGODB_URI=mongodb://graylog-mongodb:27017/graylog
+    ulimits:
+      memlock:
+        hard: -1
+        soft: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - graylog-datanode-data:/var/lib/graylog-datanode
+    ports:
+      - "127.0.0.1:8999:8999"  # DataNode API
+      - "127.0.0.1:9200:9200"  # OpenSearch API
+    depends_on:
+      - graylog-mongodb
+    restart: on-failure
+
+  # Graylog server
+  graylog:
+    image: docker.io/graylog/graylog:7.0
+    hostname: graylog-server
+    environment:
+      - GRAYLOG_NODE_ID_FILE=/usr/share/graylog/data/config/node-id
+      - GRAYLOG_PASSWORD_SECRET=${GRAYLOG_PASSWORD_SECRET}
+      - GRAYLOG_ROOT_PASSWORD_SHA2=${GRAYLOG_ROOT_PASSWORD_SHA2}
+      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
+      - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
+      - GRAYLOG_MONGODB_URI=mongodb://graylog-mongodb:27017/graylog
+    volumes:
+      - graylog-data:/usr/share/graylog/data
+    ports:
+      - "9000:9000"   # Graylog Web UI
+      - "4317"        # OTLP gRPC (internal only)
+    depends_on:
+      - graylog-mongodb
+      - graylog-datanode
+    restart: on-failure
+
   # ==================== Central OTEL Collector ====================
 
   central-collector:
@@ -35,11 +89,13 @@ services:
       - ./otel-collectors/central-config.yaml:/etc/otel-collector-config.yaml:ro
     environment:
       - COLLECTOR_API_KEY=${COLLECTOR_API_KEY}
-      - JAEGER_ENDPOINT=jaeger:4317
+      - JAEGER_ENDPOINT=${JAEGER_ENDPOINT}
       - LGTM_ENDPOINT=grafana:4317
+      - GRAYLOG_ENDPOINT=graylog:4317
     depends_on:
       - jaeger
       - grafana
+      - graylog
 
   # ==================== Sidecar OTEL Collectors ====================
 
@@ -128,7 +184,7 @@ services:
     build:
       context: ./services/orchestrator
     environment:
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=${REDIS_URL}
       - OTEL_SERVICE_NAME=dns-orchestrator
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://orchestrator-collector:4317
       - OTEL_LOGS_EXPORTER=otlp
@@ -143,7 +199,7 @@ services:
       context: ./services/workers
     environment:
       - WORKER_LOCATION=us-east-1
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=${REDIS_URL}
       - OTEL_SERVICE_NAME=dns-worker-us-east-1
       - OTEL_EXPORTER_OTLP_ENDPOINT=worker-us-collector:4317
       - OTEL_LOGS_EXPORTER=otlp
@@ -156,7 +212,7 @@ services:
       context: ./services/workers
     environment:
       - WORKER_LOCATION=eu-west-1
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=${REDIS_URL}
       - OTEL_SERVICE_NAME=dns-worker-eu-west-1
       - OTEL_EXPORTER_OTLP_ENDPOINT=worker-eu-collector:4317
       - OTEL_LOGS_EXPORTER=otlp
@@ -169,10 +225,15 @@ services:
       context: ./services/workers
     environment:
       - WORKER_LOCATION=asia-south-1
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=${REDIS_URL}
       - OTEL_SERVICE_NAME=dns-worker-asia-south-1
       - OTEL_EXPORTER_OTLP_ENDPOINT=worker-asia-collector:4317
       - OTEL_LOGS_EXPORTER=otlp
     depends_on:
       - redis
       - worker-asia-collector
+
+volumes:
+  graylog-mongodb-data:
+  graylog-datanode-data:
+  graylog-data:
