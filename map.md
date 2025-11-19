@@ -21,6 +21,8 @@ graph TB
     WorkerUSCol[Worker US Collector]
     WorkerEUCol[Worker EU Collector]
     WorkerAsiaCol[Worker Asia Collector]
+    Grafana[Grafana]
+    Graylog["Graylog"]
 
     %% HTTP Request Flow
     Client -->|"HTTP POST<br/>/api/v1/dns/lookup"| Gateway
@@ -47,7 +49,9 @@ graph TB
     WorkerUSCol ==>|"Forward"| Central
     WorkerEUCol ==>|"Forward"| Central
     WorkerAsiaCol ==>|"Forward"| Central
-    Central ==>|"Export"| Jaeger
+    Central ==>|"Export traces"| Jaeger
+    Central ==>|"Export logs/metrics"| Grafana
+    Central ==>|"Export logs"| Graylog
 
     %% Styling
     classDef appService fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
@@ -58,7 +62,7 @@ graph TB
 
     class Gateway,Orchestrator appService
     class WorkerUS,WorkerEU,WorkerAsia worker
-    class Redis,Jaeger infrastructure
+    class Redis,Jaeger,Grafana,Graylog infrastructure
     class Central,GatewayCol,OrchCol,WorkerUSCol,WorkerEUCol,WorkerAsiaCol collector
     class Client client
 ```
@@ -81,6 +85,8 @@ graph TB
 |-----------|---------|-------|---------|
 | **Redis** | 7-alpine | 6379 | Event streaming with consumer groups |
 | **Jaeger** | 1.51 | 16686 (UI), 4317 (OTLP) | Trace visualization and storage |
+| **Grafana** | Grafana | 3000 (UI), 4317 (OTLP) | Log/metric exploration + Tempo/Loki |
+| **Graylog** | Graylog 7.0 | 9000 (UI), 4317 (OTLP) | Log aggregation/search (Mongo+DataNode+Server) |
 
 ### OpenTelemetry Collectors
 
@@ -124,6 +130,13 @@ Worker Asia → Worker Asia Collector → Central Collector → Jaeger
 - **Protocol:** OTLP over gRPC
 - **Multi-tier:** All services use sidecar collectors for per-service trace processing
 - **Architecture:** 6 sidecar collectors + 1 central aggregator = 7 total collectors
+
+### 4. Log Export Flow (OTLP)
+```
+Gateway/Orchestrator/Workers → Their Sidecar → Central Collector → Grafana LGTM + Graylog
+```
+- **Purpose:** Grafana LGTM surfaces logs/metrics, Graylog provides searchable log storage (Mongo+DataNode+Server).
+- **Dual export:** Central collector forwards traces to Jaeger while streaming logs to the logging stack, keeping dashboards and search in sync.
 
 ## Key Architecture Patterns
 
