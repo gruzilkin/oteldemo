@@ -8,6 +8,8 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth
 
 processors:
   batch:
@@ -32,6 +34,10 @@ processors:
     sampling_percentage: 100
 
 extensions:
+  # Bearer token authentication for incoming requests
+  bearertokenauth:
+    token: ${COLLECTOR_API_KEY}
+
   # Health check extension
   health_check:
     endpoint: 0.0.0.0:13133
@@ -63,29 +69,22 @@ exporters:
     tls:
       insecure: true
 
-  # Logging exporter for debugging
-  logging:
-    loglevel: info
-    sampling_initial: 10
-    sampling_thereafter: 500
-
 service:
-  extensions: [health_check, pprof, zpages]
+  extensions: [bearertokenauth, health_check, pprof, zpages]
 
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, resource, probabilistic_sampler, batch]
-      exporters: [otlp/jaeger, otlp/lgtm, logging]
+      exporters: [otlp/jaeger, otlp/lgtm]
 
     logs:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
-      exporters: [otlp/lgtm, otlp/graylog, logging]
+      exporters: [otlp/lgtm, otlp/graylog]
 
   telemetry:
     logs:
       level: info
     metrics:
       level: detailed
-      address: 0.0.0.0:8888

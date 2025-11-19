@@ -83,7 +83,7 @@ services:
   # ==================== Central OTEL Collector ====================
 
   central-collector:
-    image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
+    image: docker.io/otel/opentelemetry-collector-contrib:latest
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/central-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -100,62 +100,62 @@ services:
   # ==================== Sidecar OTEL Collectors ====================
 
   gateway-collector:
-    image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
+    image: docker.io/otel/opentelemetry-collector-contrib:latest
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/sidecar-config.yaml:/etc/otel-collector-config.yaml:ro
     environment:
       - COLLECTOR_NAME=gateway-collector
       - COLLECTOR_API_KEY=${COLLECTOR_API_KEY}
-      - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4317
+      - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4318
     depends_on:
       - central-collector
 
   orchestrator-collector:
-    image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
+    image: docker.io/otel/opentelemetry-collector-contrib:latest
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/sidecar-config.yaml:/etc/otel-collector-config.yaml:ro
     environment:
       - COLLECTOR_NAME=orchestrator-collector
       - COLLECTOR_API_KEY=${COLLECTOR_API_KEY}
-      - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4317
+      - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4318
     depends_on:
       - central-collector
 
   worker-us-collector:
-    image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
+    image: docker.io/otel/opentelemetry-collector-contrib:latest
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/sidecar-config.yaml:/etc/otel-collector-config.yaml:ro
     environment:
       - COLLECTOR_NAME=worker-us-collector
       - COLLECTOR_API_KEY=${COLLECTOR_API_KEY}
-      - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4317
+      - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4318
     depends_on:
       - central-collector
 
   worker-eu-collector:
-    image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
+    image: docker.io/otel/opentelemetry-collector-contrib:latest
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/sidecar-config.yaml:/etc/otel-collector-config.yaml:ro
     environment:
       - COLLECTOR_NAME=worker-eu-collector
       - COLLECTOR_API_KEY=${COLLECTOR_API_KEY}
-      - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4317
+      - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4318
     depends_on:
       - central-collector
 
   worker-asia-collector:
-    image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
+    image: docker.io/otel/opentelemetry-collector-contrib:latest
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/sidecar-config.yaml:/etc/otel-collector-config.yaml:ro
     environment:
       - COLLECTOR_NAME=worker-asia-collector
       - COLLECTOR_API_KEY=${COLLECTOR_API_KEY}
-      - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4317
+      - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4318
     depends_on:
       - central-collector
 

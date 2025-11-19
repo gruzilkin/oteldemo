@@ -1,6 +1,11 @@
 # OpenTelemetry Collector Sidecar Configuration
 # This collector runs as a sidecar to each service and forwards traces and logs to the central collector
 
+extensions:
+  # Bearer token authentication for outgoing requests
+  bearertokenauth:
+    token: ${COLLECTOR_API_KEY}
+
 receivers:
   otlp:
     protocols:
@@ -31,29 +36,25 @@ processors:
     limit_mib: 512
 
 exporters:
-  # Export to central collector
-  otlp/central:
-    endpoint: ${CENTRAL_COLLECTOR_ENDPOINT}
-    tls:
-      insecure: true
-
-  # Logging exporter for debugging (optional)
-  logging:
-    loglevel: info
-    sampling_initial: 5
-    sampling_thereafter: 200
+  # Export to central collector via HTTP with bearer token auth
+  otlphttp/central:
+    endpoint: http://${CENTRAL_COLLECTOR_ENDPOINT}
+    auth:
+      authenticator: bearertokenauth
 
 service:
+  extensions: [bearertokenauth]
+
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
-      exporters: [otlp/central, logging]
+      exporters: [otlphttp/central]
 
     logs:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
-      exporters: [otlp/central, logging]
+      exporters: [otlphttp/central]
 
   telemetry:
     logs:
