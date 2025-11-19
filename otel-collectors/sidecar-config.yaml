@@ -1,5 +1,5 @@
 # OpenTelemetry Collector Sidecar Configuration
-# This collector runs as a sidecar to each service and forwards traces to the central collector
+# This collector runs as a sidecar to each service and forwards traces and logs to the central collector
 
 receivers:
   otlp:
@@ -46,6 +46,11 @@ exporters:
 service:
   pipelines:
     traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp/central, logging]
+
+    logs:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
       exporters: [otlp/central, logging]

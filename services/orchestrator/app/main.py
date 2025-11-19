@@ -12,6 +12,10 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 
 from app.routes import dns_routes
 from app.services.redis_service import redis_service
@@ -25,32 +29,57 @@ logger = logging.getLogger(__name__)
 
 
 def setup_telemetry():
-    """Configure OpenTelemetry tracing"""
+    """Configure OpenTelemetry tracing and logging"""
     # Create resource
     resource = Resource.create({
         "service.name": os.getenv("OTEL_SERVICE_NAME", "dns-orchestrator"),
         "service.version": "1.0.0",
     })
 
+    # Configure OTLP endpoint
+    otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://orchestrator-collector:4317")
+
+    # === TRACING SETUP ===
     # Create tracer provider
     tracer_provider = TracerProvider(resource=resource)
 
-    # Configure OTLP exporter
-    otlp_exporter = OTLPSpanExporter(
-        endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://orchestrator-collector:4317"),
+    # Configure OTLP trace exporter
+    trace_exporter = OTLPSpanExporter(
+        endpoint=otlp_endpoint,
         insecure=True
     )
 
     # Add span processor
-    tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+    tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
 
     # Set global tracer provider
     trace.set_tracer_provider(tracer_provider)
 
+    # === LOGGING SETUP ===
+    # Create logger provider
+    logger_provider = LoggerProvider(resource=resource)
+
+    # Configure OTLP log exporter
+    log_exporter = OTLPLogExporter(
+        endpoint=otlp_endpoint,
+        insecure=True
+    )
+
+    # Add log processor
+    logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
+
+    # Add logging handler to root logger
+    handler = LoggingHandler(logger_provider=logger_provider)
+    logging.getLogger().addHandler(handler)
+
+    # Instrument Python logging to create log records
+    LoggingInstrumentor().instrument()
+
+    # === INSTRUMENTATION ===
     # Instrument Redis
     RedisInstrumentor().instrument()
 
-    logger.info("OpenTelemetry configured successfully")
+    logger.info("OpenTelemetry tracing and logging configured successfully")
 
 
 @asynccontextmanager

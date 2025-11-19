@@ -20,6 +20,12 @@ services:
     ports:
       - "16686:16686"  # Jaeger UI
 
+  # Grafana LGTM (Loki, Grafana, Tempo, Mimir) for logs and metrics
+  grafana:
+    image: docker.io/grafana/otel-lgtm:latest
+    ports:
+      - "3000:3000"   # Grafana UI
+
   # ==================== Central OTEL Collector ====================
 
   central-collector:
@@ -30,8 +36,10 @@ services:
     environment:
       - COLLECTOR_API_KEY=${COLLECTOR_API_KEY}
       - JAEGER_ENDPOINT=jaeger:4317
+      - LGTM_ENDPOINT=grafana:4317
     depends_on:
       - jaeger
+      - grafana
 
   # ==================== Sidecar OTEL Collectors ====================
 
@@ -108,7 +116,7 @@ services:
       - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
       - OTEL_TRACES_EXPORTER=otlp
       - OTEL_METRICS_EXPORTER=none
-      - OTEL_LOGS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=otlp
     ports:
       - "8080:8080"
     depends_on:
@@ -123,6 +131,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - OTEL_SERVICE_NAME=dns-orchestrator
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://orchestrator-collector:4317
+      - OTEL_LOGS_EXPORTER=otlp
     depends_on:
       - redis
       - orchestrator-collector
@@ -137,6 +146,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - OTEL_SERVICE_NAME=dns-worker-us-east-1
       - OTEL_EXPORTER_OTLP_ENDPOINT=worker-us-collector:4317
+      - OTEL_LOGS_EXPORTER=otlp
       - HTTP_PORT=8080
     depends_on:
       - redis
@@ -150,6 +160,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - OTEL_SERVICE_NAME=dns-worker-eu-west-1
       - OTEL_EXPORTER_OTLP_ENDPOINT=worker-eu-collector:4317
+      - OTEL_LOGS_EXPORTER=otlp
       - HTTP_PORT=8080
     depends_on:
       - redis
@@ -163,6 +174,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - OTEL_SERVICE_NAME=dns-worker-asia-south-1
       - OTEL_EXPORTER_OTLP_ENDPOINT=worker-asia-collector:4317
+      - OTEL_LOGS_EXPORTER=otlp
       - HTTP_PORT=8080
     depends_on:
       - redis

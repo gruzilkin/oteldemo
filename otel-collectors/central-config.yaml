@@ -1,5 +1,5 @@
 # OpenTelemetry Collector Central Configuration
-# This collector receives traces from all sidecar collectors and exports to Jaeger
+# This collector receives traces and logs from all sidecar collectors and exports to Jaeger and Grafana LGTM
 
 receivers:
   otlp:
@@ -45,9 +45,15 @@ extensions:
     endpoint: 0.0.0.0:55679
 
 exporters:
-  # Export to Jaeger
+  # Export traces to Jaeger
   otlp/jaeger:
     endpoint: ${JAEGER_ENDPOINT}
+    tls:
+      insecure: true
+
+  # Export traces and logs to Grafana LGTM
+  otlp/lgtm:
+    endpoint: ${LGTM_ENDPOINT}
     tls:
       insecure: true
 
@@ -64,7 +70,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, resource, probabilistic_sampler, batch]
-      exporters: [otlp/jaeger, logging]
+      exporters: [otlp/jaeger, otlp/lgtm, logging]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp/lgtm, logging]
 
   telemetry:
     logs:

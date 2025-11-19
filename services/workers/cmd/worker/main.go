@@ -22,14 +22,25 @@ func main() {
 
 	log.Printf("Starting DNS Worker for location: %s", cfg.Location)
 
-	// Initialize OpenTelemetry
-	shutdown, err := telemetry.InitTracer(cfg)
+	// Initialize OpenTelemetry Tracing
+	shutdownTracer, err := telemetry.InitTracer(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize tracer: %v", err)
 	}
 	defer func() {
-		if err := shutdown(context.Background()); err != nil {
+		if err := shutdownTracer(context.Background()); err != nil {
 			log.Printf("Error shutting down tracer: %v", err)
+		}
+	}()
+
+	// Initialize OpenTelemetry Logging
+	shutdownLogger, _, err := telemetry.InitLogger(cfg)
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer func() {
+		if err := shutdownLogger(context.Background()); err != nil {
+			log.Printf("Error shutting down logger: %v", err)
 		}
 	}()
 
