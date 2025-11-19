@@ -6,31 +6,24 @@ services:
   # Redis for event streaming
   redis:
     image: docker.io/redis:7-alpine
-    container_name: oteldemo-redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      - oteldemo
 
   # Jaeger all-in-one for trace visualization
   jaeger:
     image: docker.io/jaegertracing/all-in-one:1.51
-    container_name: oteldemo-jaeger
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     ports:
       - "16686:16686"  # Jaeger UI
-    networks:
-      - oteldemo
 
   # ==================== Central OTEL Collector ====================
 
   central-collector:
     image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
-    container_name: oteldemo-central-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/central-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -39,14 +32,11 @@ services:
       - JAEGER_ENDPOINT=jaeger:4317
     depends_on:
       - jaeger
-    networks:
-      - oteldemo
 
   # ==================== Sidecar OTEL Collectors ====================
 
   gateway-collector:
     image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
-    container_name: oteldemo-gateway-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/sidecar-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -56,12 +46,9 @@ services:
       - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4317
     depends_on:
       - central-collector
-    networks:
-      - oteldemo
 
   orchestrator-collector:
     image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
-    container_name: oteldemo-orchestrator-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/sidecar-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -71,12 +58,9 @@ services:
       - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4317
     depends_on:
       - central-collector
-    networks:
-      - oteldemo
 
   worker-us-collector:
     image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
-    container_name: oteldemo-worker-us-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/sidecar-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -86,12 +70,9 @@ services:
       - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4317
     depends_on:
       - central-collector
-    networks:
-      - oteldemo
 
   worker-eu-collector:
     image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
-    container_name: oteldemo-worker-eu-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/sidecar-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -101,12 +82,9 @@ services:
       - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4317
     depends_on:
       - central-collector
-    networks:
-      - oteldemo
 
   worker-asia-collector:
     image: docker.io/otel/opentelemetry-collector-contrib:0.91.0
-    container_name: oteldemo-worker-asia-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collectors/sidecar-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -116,8 +94,6 @@ services:
       - CENTRAL_COLLECTOR_ENDPOINT=central-collector:4317
     depends_on:
       - central-collector
-    networks:
-      - oteldemo
 
   # ==================== Application Services ====================
 
@@ -125,8 +101,6 @@ services:
   gateway:
     build:
       context: ./services/gateway
-      dockerfile: Containerfile
-    container_name: oteldemo-gateway
     environment:
       - ORCHESTRATOR_URL=http://orchestrator:8001
       - OTEL_SERVICE_NAME=dns-gateway
@@ -140,15 +114,11 @@ services:
     depends_on:
       - orchestrator
       - gateway-collector
-    networks:
-      - oteldemo
 
   # Python Orchestrator Service
   orchestrator:
     build:
       context: ./services/orchestrator
-      dockerfile: Containerfile
-    container_name: oteldemo-orchestrator
     environment:
       - REDIS_URL=redis://redis:6379
       - OTEL_SERVICE_NAME=dns-orchestrator
@@ -156,16 +126,12 @@ services:
     depends_on:
       - redis
       - orchestrator-collector
-    networks:
-      - oteldemo
 
   # Go Worker Services (simulating different geo locations)
 
   worker-us-east:
     build:
       context: ./services/workers
-      dockerfile: Containerfile
-    container_name: oteldemo-worker-us-east
     environment:
       - WORKER_LOCATION=us-east-1
       - REDIS_URL=redis://redis:6379
@@ -175,14 +141,10 @@ services:
     depends_on:
       - redis
       - worker-us-collector
-    networks:
-      - oteldemo
 
   worker-eu-west:
     build:
       context: ./services/workers
-      dockerfile: Containerfile
-    container_name: oteldemo-worker-eu-west
     environment:
       - WORKER_LOCATION=eu-west-1
       - REDIS_URL=redis://redis:6379
@@ -192,14 +154,10 @@ services:
     depends_on:
       - redis
       - worker-eu-collector
-    networks:
-      - oteldemo
 
   worker-asia-south:
     build:
       context: ./services/workers
-      dockerfile: Containerfile
-    container_name: oteldemo-worker-asia-south
     environment:
       - WORKER_LOCATION=asia-south-1
       - REDIS_URL=redis://redis:6379
@@ -209,9 +167,3 @@ services:
     depends_on:
       - redis
       - worker-asia-collector
-    networks:
-      - oteldemo
-
-networks:
-  oteldemo:
-    driver: bridge
