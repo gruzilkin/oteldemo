@@ -26,24 +26,22 @@ type Worker struct {
 	cfg         *config.Config
 	redis       *redis.Client
 	dnsResolver *dns.Resolver
-	logger      *slog.Logger
 }
 
 // NewWorker creates a new worker
-func NewWorker(cfg *config.Config, redisClient *redis.Client, dnsResolver *dns.Resolver, logger *slog.Logger) *Worker {
+func NewWorker(cfg *config.Config, redisClient *redis.Client, dnsResolver *dns.Resolver) *Worker {
 	return &Worker{
 		cfg:         cfg,
 		redis:       redisClient,
 		dnsResolver: dnsResolver,
-		logger:      logger,
 	}
 }
 
 // Start starts the worker
 func (w *Worker) Start(ctx context.Context) error {
-		w.logger.InfoContext(ctx, "Worker starting",
-			"location", w.cfg.Location,
-		)
+	slog.InfoContext(ctx, "Worker starting",
+		"location", w.cfg.Location,
+	)
 
 	// Create consumer group
 	if err := w.redis.CreateConsumerGroup(ctx, w.cfg.TasksStream, w.cfg.ConsumerGroup); err != nil {
@@ -56,7 +54,7 @@ func (w *Worker) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			w.logger.Info("Worker stopping")
+			slog.Info("Worker stopping")
 			return nil
 		default:
 			// First, check for pending messages (delivered but not acknowledged)
@@ -68,20 +66,20 @@ func (w *Worker) Start(ctx context.Context) error {
 				consumerName,
 			)
 
-				if err != nil && !strings.Contains(err.Error(), "i/o timeout") {
-					w.logger.ErrorContext(ctx, "Error reading pending messages",
-						"error", err,
-					)
-				}
+			if err != nil && !strings.Contains(err.Error(), "i/o timeout") {
+				slog.ErrorContext(ctx, "Error reading pending messages",
+					"error", err,
+				)
+			}
 
 			// Process pending messages first
 			for _, msg := range pendingMessages {
 				w.processMessage(ctx, msg)
-					if err := w.redis.AckMessage(ctx, w.cfg.TasksStream, w.cfg.ConsumerGroup, msg.ID); err != nil {
-						w.logger.ErrorContext(ctx, "Error acknowledging pending message",
-							"error", err,
-						)
-					}
+				if err := w.redis.AckMessage(ctx, w.cfg.TasksStream, w.cfg.ConsumerGroup, msg.ID); err != nil {
+					slog.ErrorContext(ctx, "Error acknowledging pending message",
+						"error", err,
+					)
+				}
 			}
 
 			// Then read new messages from stream
@@ -92,13 +90,13 @@ func (w *Worker) Start(ctx context.Context) error {
 				consumerName,
 			)
 
-				if err != nil {
-					// Timeout errors are expected during idle periods, don't log them
-					if !strings.Contains(err.Error(), "i/o timeout") {
-						w.logger.ErrorContext(ctx, "Error reading from stream",
-							"error", err,
-						)
-					}
+			if err != nil {
+				// Timeout errors are expected during idle periods, don't log them
+				if !strings.Contains(err.Error(), "i/o timeout") {
+					slog.ErrorContext(ctx, "Error reading from stream",
+						"error", err,
+					)
+				}
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -108,11 +106,11 @@ func (w *Worker) Start(ctx context.Context) error {
 				w.processMessage(ctx, msg)
 
 				// Acknowledge message
-					if err := w.redis.AckMessage(ctx, w.cfg.TasksStream, w.cfg.ConsumerGroup, msg.ID); err != nil {
-						w.logger.ErrorContext(ctx, "Error acknowledging message",
-							"error", err,
-						)
-					}
+				if err := w.redis.AckMessage(ctx, w.cfg.TasksStream, w.cfg.ConsumerGroup, msg.ID); err != nil {
+					slog.ErrorContext(ctx, "Error acknowledging message",
+						"error", err,
+					)
+				}
 			}
 		}
 	}
@@ -125,13 +123,13 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 	// Extract task data
 	dataJSON, ok := msg.Data["data"].(string)
 	if !ok {
-		w.logger.Warn("Invalid message format", "data", msg.Data)
+		slog.Warn("Invalid message format", "data", msg.Data)
 		return
 	}
 
 	var task Task
 	if err := json.Unmarshal([]byte(dataJSON), &task); err != nil {
-		w.logger.Error("Error parsing task", "error", err)
+		slog.Error("Error parsing task", "error", err)
 		return
 	}
 
@@ -142,7 +140,7 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 			carrier.Set(k, v)
 		}
 	} else {
-		w.logger.Warn("Missing trace context for task", "task_id", task.TaskID)
+		slog.Warn("Missing trace context for task", "task_id", task.TaskID)
 	}
 
 	// Extract context from carrier
@@ -160,7 +158,7 @@ func (w *Worker) processMessage(ctx context.Context, msg redis.StreamMessage) {
 	)
 	defer span.End()
 
-	taskLogger := w.logger.With(
+	taskLogger := slog.With(
 		"task_id", task.TaskID,
 		"domain", task.Domain,
 		"worker_location", w.cfg.Location,

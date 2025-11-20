@@ -121,6 +121,7 @@ func InitLogger(cfg *config.Config) (func(context.Context) error, *logsdk.Logger
 
 	// Set as default slog logger
 	logsdk.SetDefault(logger)
+	log.Println("Default slog logger set")
 
 	log.Printf("OpenTelemetry logger initialized for service: %s", cfg.ServiceName)
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -31,7 +32,7 @@ func main() {
 	}()
 
 	// Initialize OpenTelemetry Logging
-	shutdownLogger, logger, err := telemetry.InitLogger(cfg)
+	shutdownLogger, _, err := telemetry.InitLogger(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
@@ -41,7 +42,7 @@ func main() {
 		}
 	}()
 
-	logger.Info("Starting DNS Worker",
+	slog.Info("Starting DNS Worker",
 		"location", cfg.Location,
 	)
 
@@ -53,7 +54,7 @@ func main() {
 	dnsResolver := dns.NewResolver(cfg)
 
 	// Create worker
-	w := worker.NewWorker(cfg, redisClient, dnsResolver, logger)
+	w := worker.NewWorker(cfg, redisClient, dnsResolver)
 
 	// Start worker
 	ctx, cancel := context.WithCancel(context.Background())
@@ -61,7 +62,7 @@ func main() {
 
 	go func() {
 		if err := w.Start(ctx); err != nil {
-			logger.Error("Worker error", "error", err)
+			slog.Error("Worker error", "error", err)
 		}
 	}()
 
@@ -70,11 +71,11 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	logger.Info("Shutting down worker...")
+	slog.Info("Shutting down worker...")
 
 	// Graceful shutdown
 	cancel() // Stop worker
 	time.Sleep(2 * time.Second)
 
-	logger.Info("Worker stopped")
+	slog.Info("Worker stopped")
 }

@@ -12,7 +12,6 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
@@ -71,9 +70,6 @@ def setup_telemetry():
     # Add logging handler to root logger
     handler = LoggingHandler(logger_provider=logger_provider)
     logging.getLogger().addHandler(handler)
-
-    # Instrument Python logging to create log records
-    LoggingInstrumentor().instrument()
 
     # === INSTRUMENTATION ===
     # Instrument Redis
